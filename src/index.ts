@@ -1,5 +1,7 @@
-import { createServer } from "http";
-import WebSocket from "ws";
+import { createServer, IncomingMessage, ServerResponse } from "http";
+import path from "path";
+import express from "express";
+import WebSocket, { Server } from "ws";
 
 import * as Automerge from "automerge";
 import AutomergeServer from "automerge-server";
@@ -43,7 +45,8 @@ const automergeServer = new AutomergeServer({
     }
 });
 
-const server = createServer();
+const app = express();
+const server = createServer(app);
 const wss = new WebSocket.Server({ server });
 
 wss.on("connection", async (ws, req: any) => {
@@ -60,7 +63,13 @@ wss.on("connection", async (ws, req: any) => {
     })
 });
 
-const PORT = 3001;
+const dir = path.resolve("./")
+app.use(express.static(path.join(dir, "build")))
+app.get('/*', function (req, res) {
+  res.sendFile(path.join(dir, "build", "index.html"));
+});
+
+const PORT = (process.env.PORT as unknown as number) ?? 3000;
 const HOST = process.env.HOST ?? "localhost";
 server.listen(PORT, HOST, () => {
     console.log(`Listening on http://${HOST}:${PORT}`);
