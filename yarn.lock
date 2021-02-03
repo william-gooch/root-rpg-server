@@ -1210,7 +1210,7 @@ responselike@^1.0.2:
 
 "root-rpg-model@https://github.com/william-gooch/root-rpg-model.git":
   version "1.0.0"
-  resolved "https://github.com/william-gooch/root-rpg-model.git#9cf13cb01d316d7af6910ab5491b9612a640bbd2"
+  resolved "https://github.com/william-gooch/root-rpg-model.git#06067bac76a265131721af5627e505a4e461895c"
 
 safe-buffer@5.1.2:
   version "5.1.2"
