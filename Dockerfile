@@ -13,6 +13,8 @@ WORKDIR /app
 RUN yarn
 # Allow traffic from all HOSTs
 ENV HOST=0.0.0.0
+# Run in production mode.
+ENV NODE_ENV=production
 # Expose port 3000
 EXPOSE 3000
 

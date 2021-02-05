@@ -10,22 +10,30 @@ import { fromPlaybook, playbooks } from "root-rpg-model";
 
 import { randomBytes } from "crypto";
 
-import level from "level";
-var db = level("db/root-rpg");
+import redis from "redis";
+
+let db;
+if(process.env.NODE_ENV === "production") {
+    db = redis.createClient(process.env.REDIS_URL);
+} else {
+    db = redis.createClient();
+}
+
 
 const initialiseCharacter = (playbook: string) => {
     return Automerge.from(fromPlaybook(playbooks[playbook ?? "arbiter"]));
 }
 
-const automergeServer = new AutomergeServer({
-    loadDocument: async (id) => {
-        try {
-            return await new Promise((resolve, reject) => {
-                db.get(id, (err, value) => {
-                    if(err) reject(err);
-                    resolve(value);
+    const automergeServer = new AutomergeServer({
+        loadDocument: async (id) => {
+            try {
+                return await new Promise((resolve, reject) => {
+                    db.get(id, (err, value) => {
+                        if(err) reject(err);
+                        if(value === null) reject("Document not found");
+                        resolve(value);
+                    });
                 });
-            });
         } catch(e) {
             return false;
         }
@@ -33,7 +41,7 @@ const automergeServer = new AutomergeServer({
 
     saveDocument: async (id, text, doc) => {
         return await new Promise<void>((resolve, reject) => {
-            db.put(id, text, (err) => {
+            db.set(id, text, (err) => {
                 if(err) reject(err);
                 resolve();
             });
@@ -57,7 +65,7 @@ wss.on("connection", async (ws, req: any) => {
         const data = JSON.parse(message.toString());
         if(data.action === "new-document") {
             const newDocId = randomBytes(16).toString('hex')
-            db.put(newDocId, Automerge.save(initialiseCharacter(data.playbook)));
+            db.set(newDocId, Automerge.save(initialiseCharacter(data.playbook)));
             ws.send(JSON.stringify({ action: "load", id: newDocId }));
         }
     })
@@ -66,7 +74,7 @@ wss.on("connection", async (ws, req: any) => {
 const dir = path.resolve("./")
 app.use(express.static(path.join(dir, "build")))
 app.get('/*', function (req, res) {
-  res.sendFile(path.join(dir, "build", "index.html"));
+res.sendFile(path.join(dir, "build", "index.html"));
 });
 
 const PORT = (process.env.PORT as unknown as number) ?? 3000;
