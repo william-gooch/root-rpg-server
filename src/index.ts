@@ -1,84 +1,75 @@
-import { createServer, IncomingMessage, ServerResponse } from "http";
+import { createServer } from "http";
 import path from "path";
 import express from "express";
-import WebSocket, { Server } from "ws";
+import WebSocket from "ws";
+import cors from "cors";
+
+require("dotenv").config();
 
 import * as Automerge from "automerge";
 import AutomergeServer from "automerge-server";
 
-import { fromPlaybook, playbooks } from "root-rpg-model";
+import apiRouter from "./api";
+import { config, close, getCollection } from "./mongo";
 
-import { randomBytes } from "crypto";
+async function main() {
+    try {
+        await config("rootrpg");
+        const coll = getCollection("characters");
 
-import redis from "redis";
+        const automergeServer = new AutomergeServer({
+            loadDocument: async (id) => {
+                try {
+                    const doc = await coll.findOne({ id });
+                    if(doc === null) throw new Error("document-not-found");
 
-let db;
-if(process.env.NODE_ENV === "production") {
-    db = redis.createClient(process.env.REDIS_URL);
-} else {
-    db = redis.createClient();
-}
+                    return doc.automerge;
+                } catch(e) {
+                    return false;
+                }
+            },
 
+            saveDocument: async (id, text, doc) => {
+                return await coll.replaceOne(
+                    { id },
+                    { id, value: doc, automerge: text },
+                    { upsert: true }
+                );
+            },
 
-const initialiseCharacter = (playbook: string) => {
-    return Automerge.from(fromPlaybook(playbooks[playbook ?? "arbiter"]));
-}
+            checkAccess: async (id, req) => {
+                return true;
+            }
+        });
 
-    const automergeServer = new AutomergeServer({
-        loadDocument: async (id) => {
-            try {
-                return await new Promise((resolve, reject) => {
-                    db.get(id, (err, value) => {
-                        if(err) reject(err);
-                        if(value === null) reject("Document not found");
-                        resolve(value);
-                    });
-                });
-        } catch(e) {
-            return false;
-        }
-    },
+        const app = express();
+        const server = createServer(app);
+        const wss = new WebSocket.Server({ server });
 
-    saveDocument: async (id, text, doc) => {
-        return await new Promise<void>((resolve, reject) => {
-            db.set(id, text, (err) => {
-                if(err) reject(err);
-                resolve();
-            });
-        })
-    },
+        wss.on("connection", async (ws, req: any) => {
+            automergeServer.handleSocket(ws, req);
+        });
 
-    checkAccess: async (id, req) => {
-        return true;
+        const dir = path.resolve("./")
+        app.use(express.static(path.join(dir, "build")))
+        app.use(cors())
+        app.use('/api', apiRouter);
+        app.get('/', (req, res) => {
+            res.sendFile(path.join(dir, "build", "index.html"));
+        });
+        app.get('*', function (req, res) {
+            res.redirect("/")
+        });
+
+        const PORT = (process.env.PORT as unknown as number) ?? 3000;
+        const HOST = process.env.HOST ?? "localhost";
+        server.listen(PORT, HOST, () => {
+            console.log(`Listening on http://${HOST}:${PORT}`);
+        });
+        server.on("close", () => close());
+    } catch(e) {
+        console.log(e);
     }
-});
+}
 
-const app = express();
-const server = createServer(app);
-const wss = new WebSocket.Server({ server });
-
-wss.on("connection", async (ws, req: any) => {
-    automergeServer.handleSocket(ws, req);
-
-    ws.on("message", (message) => {
-        console.log("message: ", message);
-        const data = JSON.parse(message.toString());
-        if(data.action === "new-document") {
-            const newDocId = randomBytes(16).toString('hex')
-            db.set(newDocId, Automerge.save(initialiseCharacter(data.playbook)));
-            ws.send(JSON.stringify({ action: "load", id: newDocId }));
-        }
-    })
-});
-
-const dir = path.resolve("./")
-app.use(express.static(path.join(dir, "build")))
-app.get('/*', function (req, res) {
-res.sendFile(path.join(dir, "build", "index.html"));
-});
-
-const PORT = (process.env.PORT as unknown as number) ?? 3000;
-const HOST = process.env.HOST ?? "localhost";
-server.listen(PORT, HOST, () => {
-    console.log(`Listening on http://${HOST}:${PORT}`);
-});
+main();
