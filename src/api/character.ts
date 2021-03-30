@@ -4,8 +4,20 @@ import express from "express";
 import * as Automerge from "automerge";
 import { fromPlaybook, playbooks } from "root-rpg-model";
 import { Characters } from "../model/character";
+import { MUser } from "../model/user";
+import { isAuthenticated } from "../passport";
 
 const characterRouter = express.Router();
+
+characterRouter.get("/my", isAuthenticated, async (req, res, next) => {
+    const result = await (req.user as MUser).populate("characters").execPopulate();
+
+    if(result.characters) {
+        return res.send(result.characters);
+    } else {
+        return res.sendStatus(404);
+    }
+})
 
 characterRouter.get("/:characterId", async (req, res, next) => {
     const result = await Characters.findOne({ id: req.params.characterId })
@@ -16,7 +28,7 @@ const initialiseCharacter = (playbook: string) => {
     return Automerge.from(fromPlaybook(playbooks[playbook ?? "arbiter"]));
 };
 
-characterRouter.post("/new/:playbook", async (req, res, next) => {
+characterRouter.post("/new/:playbook", isAuthenticated, async (req, res, next) => {
     const newDocId = base64url.encode(randomBytes(6));
     const newDoc = initialiseCharacter(req.params.playbook);
 
@@ -27,11 +39,14 @@ characterRouter.post("/new/:playbook", async (req, res, next) => {
     });
     await result.save();
 
+    (req.user as MUser).characters.push(result._id);
+    (req.user as MUser).save();
+
     res.send(newDocId);
 });
 
-characterRouter.delete("/:characterId", async (req, res, next) => {
-    const result = await Characters.deleteOne({ id: req.params.characterId });
+characterRouter.delete("/:characterId", isAuthenticated, async (req, res, next) => {
+    const result = await Characters.deleteOne({ id: req.params.characterId, _id: { $in: (req.user as MUser).characters } });
     res.sendStatus(200);
 });
 
