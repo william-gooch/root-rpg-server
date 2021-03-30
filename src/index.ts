@@ -6,21 +6,24 @@ import cors from "cors";
 
 require("dotenv").config();
 
-import * as Automerge from "automerge";
 import AutomergeServer from "automerge-server";
 
 import apiRouter from "./api";
-import { config, close, getCollection } from "./mongo";
+import { config, close } from "./mongo";
+import { Characters } from "./model/character";
+
+import session from "express-session";
+import "./passport";
+import passport from "passport";
 
 async function main() {
     try {
-        await config("rootrpg");
-        const coll = getCollection("characters");
+        await config();
 
         const automergeServer = new AutomergeServer({
             loadDocument: async (id) => {
                 try {
-                    const doc = await coll.findOne({ id });
+                    const doc = await Characters.findOne({ id });
                     if(doc === null) throw new Error("document-not-found");
 
                     return doc.automerge;
@@ -30,7 +33,7 @@ async function main() {
             },
 
             saveDocument: async (id, text, doc) => {
-                return await coll.replaceOne(
+                return await Characters.replaceOne(
                     { id },
                     { id, value: doc, automerge: text },
                     { upsert: true }
@@ -50,9 +53,23 @@ async function main() {
             automergeServer.handleSocket(ws, req);
         });
 
-        const dir = path.resolve("./")
-        app.use(express.static(path.join(dir, "build")))
-        app.use(cors())
+        const dir = path.resolve("./");
+        app.use(express.static(path.join(dir, "build")));
+        app.use(express.json());
+
+        app.use(cors({
+            origin: true,
+            credentials: true,
+        }));
+
+        app.use(session({
+            resave: false,
+            saveUninitialized: true,
+            secret: "rootin",
+        }));
+        app.use(passport.initialize());
+        app.use(passport.session());
+
         app.use('/api', apiRouter);
         app.get('/', (req, res) => {
             res.sendFile(path.join(dir, "build", "index.html"));

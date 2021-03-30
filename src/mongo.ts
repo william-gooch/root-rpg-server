@@ -1,30 +1,12 @@
-import { MongoClient } from "mongodb";
+import mongoose from "mongoose";
 
-let client: MongoClient;
-let dbName: string;
+let db: mongoose.Connection;
 
-export const config = async (name: string) => {
-    dbName = name;
-    client = new MongoClient(process.env.MONGODB_URL, { useNewUrlParser: true, useUnifiedTopology: true });
-    await client.connect();
+export const config = async () => {
+    const mongo = await mongoose.connect(process.env.MONGODB_URL, { useNewUrlParser: true, useUnifiedTopology: true });
+    db = mongo.connection;
 }
 
 export const close = async () => {
-    await client.close();
-}
-
-const getClient = (): MongoClient => {
-    if(client) {
-        return client;
-    } else {
-        throw new Error("Must initialize client before getting it!");
-    }
-}
-
-export const getDb = () => {
-    return getClient().db(dbName);
-}
-
-export const getCollection = (name: string) => {
-    return getDb().collection(name);
+    db.close();
 }
