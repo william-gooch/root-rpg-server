@@ -9,12 +9,7 @@ const campaignRouter = express.Router();
 
 campaignRouter.get("/my", isAuthenticated, async (req, res, next) => {
     const result = await (req.user as MUser).populate("campaigns").execPopulate();
-
-    if(result.campaigns) {
-        return res.send(result.campaigns);
-    } else {
-        return res.sendStatus(404);
-    }
+    return res.send(result.campaigns);
 })
 
 campaignRouter.get("/:campaignId", isAuthenticated, async (req, res, next) => {
