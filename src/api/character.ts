@@ -13,7 +13,8 @@ characterRouter.get("/my", isAuthenticated, async (req, res, next) => {
     const result = await (req.user as MUser).populate("characters").execPopulate();
 
     if(result.characters) {
-        return res.send(result.characters);
+        const characters = Object.fromEntries(result.characters.map(char => [char.id, char.value]));
+        return res.send(characters);
     } else {
         return res.sendStatus(404);
     }
