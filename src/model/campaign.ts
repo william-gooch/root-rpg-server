@@ -9,6 +9,7 @@ export interface MCampaign extends Document {
 
 const campaignSchema = new Schema({
     id: String,
+    owner: { type: Schema.Types.ObjectId, ref: "users" },
     name: String,
     characters: [{ type: Schema.Types.ObjectId, ref: "characters" }],
 });
